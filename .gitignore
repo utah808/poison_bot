@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env (если есть)
+venv/
+env/
+
+# OS files
+.DS_Store
+
+# Playwright state
+storage_state.json
+
+# Sensitive credentials
+*.json
+
+# Orders file (если не хочешь пушить заказы)
+orders.csv
+
