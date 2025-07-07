@@ -21,10 +21,10 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 user_data = {}
 
-# Главное меню
+# Главное меню с иконками
 main_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-main_kb.add("Обувь", "Одежда", "Аксессуары")
-main_kb.add("Перезапустить", "Остановить")
+main_kb.add("👟 Обувь", "👕 Одежда", "🎒 Аксессуары")
+main_kb.add("🔄 Перезапустить", "❌ Остановить")
 main_kb.add("💬 Связаться с администратором")
 
 # /start
@@ -37,15 +37,15 @@ async def start_cmd(message: types.Message):
         reply_markup=main_kb
     )
 
-# Перезапустить
-@dp.message_handler(lambda msg: msg.text == "Перезапустить")
+# Перезапустить с иконкой
+@dp.message_handler(lambda msg: msg.text == "🔄 Перезапустить")
 async def restart(message: types.Message):
     uid = message.from_user.id
     user_data.pop(uid, None)
     await start_cmd(message)
 
-# Остановить
-@dp.message_handler(lambda msg: msg.text == "Остановить")
+# Остановить с иконкой
+@dp.message_handler(lambda msg: msg.text == "❌ Остановить")
 async def cancel(message: types.Message):
     uid = message.from_user.id
     user_data.pop(uid, None)
@@ -56,8 +56,8 @@ async def cancel(message: types.Message):
 async def contact_admin(message: types.Message):
     await message.answer("📞 Связаться с администратором: @utah808")
 
-# Категория
-@dp.message_handler(lambda msg: msg.text in ["Обувь", "Одежда", "Аксессуары"])
+# Категория с иконками
+@dp.message_handler(lambda msg: msg.text in ["👟 Обувь", "👕 Одежда", "🎒 Аксессуары"])
 async def category_chosen(message: types.Message):
     uid = message.from_user.id
     if "items" not in user_data.get(uid, {}):
@@ -68,7 +68,8 @@ async def category_chosen(message: types.Message):
         await proceed_to_checkout(message)
         return
 
-    user_data[uid]["current"] = {"category": message.text.lower()}
+    category_name = message.text.split(" ")[1].lower()
+    user_data[uid]["current"] = {"category": category_name}
     await message.answer("📎 Пришли ссылку на товар:")
 
 # Ловим всё
@@ -78,7 +79,6 @@ async def handle_all(message: types.Message):
     data = user_data.get(uid, {})
     current = data.get("current")
 
-    # === Если пользователь на финальном этапе ===
     if data.get("proceeding"):
         if message.text == "✅ Продолжить заказ":
             data["ready_for_details"] = True
@@ -111,7 +111,6 @@ async def handle_all(message: types.Message):
                 await save_order(uid, message)
                 return
 
-    # === Добавление нового товара ===
     if message.text == "Добавить ещё товар":
         await message.answer("📂 Выбери категорию нового товара:", reply_markup=main_kb)
         return
@@ -178,22 +177,31 @@ async def handle_all(message: types.Message):
         )
         return
 
+# Финальный расчёт с эмодзи
 async def proceed_to_checkout(message):
     uid = message.from_user.id
     user_data[uid]["proceeding"] = True
-    user_data[uid]["ready_for_details"] = False  # Новый флаг
+    user_data[uid]["ready_for_details"] = False
 
     total = 0
     total_delivery = 0
     cny = get_cny_rate()
     summary = []
 
+    category_icons = {
+        "обувь": "👟",
+        "одежда": "🧥",
+        "аксессуары": "🎒"
+    }
+
     for item in user_data[uid]["items"]:
+        icon = category_icons.get(item['category'], "📦")
         delivery = round(item["weight"] * 700)
         total += item["price_rub"]
         total_delivery += delivery
+
         summary.append(
-            f"- {item['category'].capitalize()}: {item['link']}\n"
+            f"{icon} {item['category'].capitalize()}: {item['link']}\n"
             f"Размер: {item['size']}, Цвет: {item['color']}, Цена: {item['price_yuan']} юаней"
         )
 
@@ -212,27 +220,33 @@ async def proceed_to_checkout(message):
     kb.add("✅ Продолжить заказ", "❌ Отменить заказ")
     await message.answer("Проверь расчёты и выбери, продолжить ли оформление заказа:", reply_markup=kb)
 
+# Сохраняем заказ красиво: каждая вещь — отдельная строка
 async def save_order(uid, message):
     data = user_data[uid]
-    items_str = ""
-    for idx, item in enumerate(data["items"], start=1):
-        items_str += (
-            f"{idx}) Категория: {item['category']}, "
-            f"Ссылка: {item['link']}, "
-            f"Размер: {item['size']}, "
-            f"Цвет: {item['color']}, "
-            f"Цена: {item['price_yuan']} юаней\n"
-        )
 
-    row = [
-        data["fio"], data["phone"], data["address"], data["index"], items_str
-    ]
-    sheet.append_row(row, value_input_option='USER_ENTERED')
+    for item in data["items"]:
+        row = [
+            data["fio"],
+            data["phone"],
+            data["address"],
+            data["index"],
+            item["category"],
+            item["link"],
+            item["size"],
+            item["color"],
+            item["price_yuan"],
+            item["price_rub"],
+            item["weight"]
+        ]
+        sheet.append_row(row, value_input_option='USER_ENTERED')
+
     await message.answer("✅ Заказ оформлен и записан! Мы свяжемся с вами.", reply_markup=main_kb)
     user_data.pop(uid, None)
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
+
+
 
 
 
