@@ -64,7 +64,7 @@ async def category_chosen(message: types.Message):
         user_data[uid] = {"items": []}
 
     if len(user_data[uid]["items"]) >= 5:
-        await message.answer("❌ Вы уже добавили максимум 5 товаров! Перейдите к оформлению заказа.")
+        await message.answer("❌ Вы уже добавили максимум 5 товаров! Переходим к оформлению.")
         await proceed_to_checkout(message)
         return
 
@@ -78,11 +78,34 @@ async def handle_all(message: types.Message):
     data = user_data.get(uid, {})
     current = data.get("current")
 
-    if message.text in ["Добавить ещё товар"]:
+    # === Если мы на финальном шаге ===
+    if data.get("proceeding"):
+        if "fio" not in data:
+            data["fio"] = message.text.strip()
+            await message.answer("📞 Введи номер телефона:")
+            return
+
+        if "phone" not in data:
+            data["phone"] = message.text.strip()
+            await message.answer("🏠 Введи адрес доставки:")
+            return
+
+        if "address" not in data:
+            data["address"] = message.text.strip()
+            await message.answer("📬 Введи почтовый индекс:")
+            return
+
+        if "index" not in data:
+            data["index"] = message.text.strip()
+            await save_order(uid, message)
+            return
+
+    # === Добавление нового товара ===
+    if message.text == "Добавить ещё товар":
         await message.answer("📂 Выбери категорию нового товара:", reply_markup=main_kb)
         return
 
-    if message.text in ["Перейти к оформлению"]:
+    if message.text == "Перейти к оформлению":
         await proceed_to_checkout(message)
         return
 
@@ -138,43 +161,23 @@ async def handle_all(message: types.Message):
         kb.add("Добавить ещё товар", "Перейти к оформлению")
         await message.answer(
             f"💰 Итоговая цена за этот товар: {total_price}₽\n"
-            f"📦 Доставка в ваш город Почтой России оплачивается отдельно!\n\n"
-            f"Что дальше? Максимум 5 товаров в одном заказе!",
+            f"📦 Доставка Почтой России оплачивается отдельно!\n\n"
+            f"Что дальше?",
             reply_markup=kb
         )
         return
 
-    if "fio" not in data and data.get("items"):
-        data["fio"] = message.text.strip()
-        await message.answer("📞 Введи номер телефона:")
-        return
-
-    if "phone" not in data and data.get("fio"):
-        data["phone"] = message.text.strip()
-        await message.answer("🏠 Введи адрес доставки:")
-        return
-
-    if "address" not in data and data.get("phone"):
-        data["address"] = message.text.strip()
-        await message.answer("📬 Введи почтовый индекс:")
-        return
-
-    if "index" not in data and data.get("address"):
-        data["index"] = message.text.strip()
-        await save_order(uid, message)
-        return
-
 async def proceed_to_checkout(message):
     uid = message.from_user.id
+    user_data[uid]["proceeding"] = True  # Флаг финального шага
     total = 0
     total_delivery = 0
     cny = get_cny_rate()
     summary = []
 
     for item in user_data[uid]["items"]:
-        item_price, weight = calculate_price(item["price_yuan"], cny, item["category"])
-        delivery = round(weight * 700)
-        total += round(item_price + delivery)
+        delivery = round(item["weight"] * 700)
+        total += item["price_rub"]
         total_delivery += delivery
         summary.append(
             f"- {item['category'].capitalize()}: {item['link']}\n"
@@ -187,9 +190,9 @@ async def proceed_to_checkout(message):
         f"📈 Актуальный курс: {cny}₽\n"
         f"🚚 Доставка до Уссурийска: {total_delivery}₽\n"
         f"💰 Общая сумма: {total}₽\n"
-        f"📦 Доставка Почтой России оплачивается отдельно!\n\n"
-        f"✏️ Введи ФИО:"
+        f"📦 Доставка Почтой России оплачивается отдельно!"
     )
+    await message.answer("✏️ Введи ФИО:")
 
 async def save_order(uid, message):
     data = user_data[uid]
@@ -212,6 +215,7 @@ async def save_order(uid, message):
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
+
 
 
     
