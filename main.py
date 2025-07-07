@@ -78,27 +78,38 @@ async def handle_all(message: types.Message):
     data = user_data.get(uid, {})
     current = data.get("current")
 
-    # === Если мы на финальном шаге ===
+    # === Если пользователь на финальном этапе ===
     if data.get("proceeding"):
-        if "fio" not in data:
-            data["fio"] = message.text.strip()
-            await message.answer("📞 Введи номер телефона:")
+        if message.text == "✅ Продолжить заказ":
+            data["ready_for_details"] = True
+            await message.answer("✏️ Введи ФИО:")
             return
 
-        if "phone" not in data:
-            data["phone"] = message.text.strip()
-            await message.answer("🏠 Введи адрес доставки:")
+        if message.text == "❌ Отменить заказ":
+            user_data.pop(uid, None)
+            await message.answer("❌ Заказ отменён.", reply_markup=main_kb)
             return
 
-        if "address" not in data:
-            data["address"] = message.text.strip()
-            await message.answer("📬 Введи почтовый индекс:")
-            return
+        if data.get("ready_for_details"):
+            if "fio" not in data:
+                data["fio"] = message.text.strip()
+                await message.answer("📞 Введи номер телефона:")
+                return
 
-        if "index" not in data:
-            data["index"] = message.text.strip()
-            await save_order(uid, message)
-            return
+            elif "phone" not in data:
+                data["phone"] = message.text.strip()
+                await message.answer("🏠 Введи адрес доставки:")
+                return
+
+            elif "address" not in data:
+                data["address"] = message.text.strip()
+                await message.answer("📬 Введи почтовый индекс:")
+                return
+
+            elif "index" not in data:
+                data["index"] = message.text.strip()
+                await save_order(uid, message)
+                return
 
     # === Добавление нового товара ===
     if message.text == "Добавить ещё товар":
@@ -169,7 +180,9 @@ async def handle_all(message: types.Message):
 
 async def proceed_to_checkout(message):
     uid = message.from_user.id
-    user_data[uid]["proceeding"] = True  # Флаг финального шага
+    user_data[uid]["proceeding"] = True
+    user_data[uid]["ready_for_details"] = False  # Новый флаг
+
     total = 0
     total_delivery = 0
     cny = get_cny_rate()
@@ -185,14 +198,19 @@ async def proceed_to_checkout(message):
         )
 
     text = "\n\n".join(summary)
+
     await message.answer(
         f"🛒 Товары:\n{text}\n\n"
         f"📈 Актуальный курс: {cny}₽\n"
         f"🚚 Доставка до Уссурийска: {total_delivery}₽\n"
         f"💰 Общая сумма: {total}₽\n"
-        f"📦 Доставка Почтой России оплачивается отдельно!"
+        f"📦 Доставка Почтой России оплачивается отдельно!",
+        disable_web_page_preview=True
     )
-    await message.answer("✏️ Введи ФИО:")
+
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("✅ Продолжить заказ", "❌ Отменить заказ")
+    await message.answer("Проверь расчёты и выбери, продолжить ли оформление заказа:", reply_markup=kb)
 
 async def save_order(uid, message):
     data = user_data[uid]
@@ -215,6 +233,7 @@ async def save_order(uid, message):
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
+
 
 
 
